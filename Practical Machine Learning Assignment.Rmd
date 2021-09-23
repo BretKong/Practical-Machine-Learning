@@ -1,0 +1,142 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "Pradeep"
+output: pdf_document
+---
+
+---
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+### Data Location
+ * Training data is available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+ * Testing data are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+### Goal
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+## Data Manipulation 
+### Initial Setup
+
+Create local files and add required packages.
+
+```{r, cache = T, results='hide'}
+## Data location
+trainingFilePath <- './data/pml-training.csv'
+testingFilePath <- './data/pml-testing.csv'
+trainingDataUrl <- 'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+testingDataUrl <- 'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+
+# Loca directories
+if (!file.exists("data")){
+  dir.create("data")
+}
+if (!file.exists("data/submission")){
+  dir.create("data/submission")
+}
+
+# Packages
+library("caret")
+library("randomForest")
+library("rpart")
+library("rpart.plot")
+library(rattle)
+
+# Setting seed to facilitate reproducible results
+set.seed(1234)
+```
+
+### Data Processing
+
+```{r, cache = T}
+# Download data
+download.file(trainingDataUrl, trainingFilePath)
+download.file(testingDataUrl,testingFilePath )
+
+# Clean data
+trainingDF <- read.csv(trainingFilePath, na.strings=c("NA","#DIV/0!", ""))
+testingDF <- read.csv(testingFilePath , na.strings=c("NA", "#DIV/0!", ""))
+trainingDF <- trainingDF[,colSums(is.na(trainingDF)) == 0]
+testingDF <- testingDF[,colSums(is.na(testingDF)) == 0]
+
+# remove the Near Zero Variance columns
+NZV <- nearZeroVar(trainingDF)
+trainingDF <- trainingDF[,-NZV]
+testingDF <- testingDF[,-NZV]
+
+# remove ID variables
+trainingDF <- trainingDF[,-(1:5)]
+testingDF <- testingDF[,-(1:5)]
+
+# See dimensions of data frames
+dim(trainingDF)
+dim(testingDF)
+
+trainingDF$classe <- as.factor(trainingDF$classe)
+```
+
+
+### Data Exploration
+
+```{r, cache = T}
+plot(as.factor(trainingDF$classe), main="classe data sctucure values", xlab="classe", ylab="Values", )
+```
+
+### Datastructures Creation
+
+Create data structures for training. Use 5 folds Cross-Validation.
+
+```{r, cache = T, results='hide'}
+subSamplesDF <- createDataPartition(y=trainingDF$classe, p=0.6, list=FALSE)
+createMultiFolds(subSamplesDF, k = 5, times = 5)
+subTrainingDF <- trainingDF[subSamplesDF, ] 
+subTestingDF <- trainingDF[-subSamplesDF, ]
+
+```
+
+See dimensions of data structures 
+```{r, cache = T}
+dim(subTrainingDF)
+dim(subTestingDF)
+```
+
+
+## Models
+Two models will be created. The model with higher accuracy will be used to answer the quiz question.
+
+### Decision Tree
+```{r, cache = T}
+# Fitting the model
+modFitDT <- rpart(classe ~ ., data=subTrainingDF, method="class")
+
+# Performing prediction
+predictDT <- predict(modFitDT, subTestingDF, type = "class")
+```
+
+```{r, cache = T}
+confusionMatrix(predictDT, subTestingDF$classe)
+```
+
+### Random Forest
+```{r, cache = T}
+# Fitting the model
+modFitRF <- randomForest(classe ~ ., data=subTrainingDF, method="class")
+
+# Perform prediction
+predictRF <- predict(modFitRF, subTestingDF, type = "class")
+```
+
+```{r, cache = T}
+confusionMatrix(predictRF, subTestingDF$classe)
+```
+
+## Results
+It is possible to observe that the **Random Forest Model** has the highest accuracy rate **0.9972**. As a result, this model is used to answer the quiz question.
+
+```{r, cache = T}
+# Performing prediction
+predictSubmission <- predict(modFitRF, testingDF, type="class")
+predictSubmission
+```
